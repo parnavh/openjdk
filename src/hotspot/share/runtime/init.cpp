@@ -119,7 +119,6 @@ void vm_init_globals() {
 
 
 jint init_globals() {
-  ProfileReuse::load();
   management_init();
   JvmtiExport::initialize_oop_storage();
 #if INCLUDE_JVMTI

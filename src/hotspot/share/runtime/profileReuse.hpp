@@ -1,12 +1,15 @@
 #pragma once
 #include "memory/allStatic.hpp"
+#include <cstdio>
+
+class Klass;
 
 class ProfileReuse : public AllStatic {
 private:
-  static int _methods_seen_before_load;
-  static bool _loaded;
+  static FILE *_capture_file;
+  static void collect_klass(Klass *k); // callback for classes_do
 
 public:
   static void load();
-  static void note_method_seen();
+  static void capture_all();
 };

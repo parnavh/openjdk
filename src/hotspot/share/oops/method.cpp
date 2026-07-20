@@ -719,7 +719,6 @@ MethodCounters* Method::build_method_counters(Thread* current, Method* m) {
     MetadataFactory::free_metadata(mh->method_holder()->class_loader_data(), counters);
   } else {
     // tty->print_cr("yoo");
-    ProfileReuse::note_method_seen();
   }
 
   return mh->method_counters();

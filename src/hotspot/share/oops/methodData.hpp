@@ -325,6 +325,9 @@ protected:
   };
 
 public:
+  int tag() { return data()->tag(); }
+  intptr_t intptr_at_public(int index) const { return intptr_at(index); }
+  
   // How many cells are in this?
   virtual int cell_count() const {
     ShouldNotReachHere();
