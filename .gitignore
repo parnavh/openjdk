@@ -32,3 +32,6 @@ test/benchmarks/**/target
 /src/hotspot/.idea/
 
 .direnv
+target/
+.mvn/
+profile_reuse.data
