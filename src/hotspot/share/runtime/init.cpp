@@ -43,6 +43,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/icache.hpp"
 #include "runtime/init.hpp"
+#include "runtime/profileReuse.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "sanitizers/leak.hpp"
@@ -118,6 +119,7 @@ void vm_init_globals() {
 
 
 jint init_globals() {
+  ProfileReuse::load();
   management_init();
   JvmtiExport::initialize_oop_storage();
 #if INCLUDE_JVMTI

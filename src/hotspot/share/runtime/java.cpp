@@ -73,6 +73,7 @@
 #include "runtime/java.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/os.hpp"
+#include "runtime/profileReuse.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/task.hpp"
@@ -472,6 +473,9 @@ void before_exit(JavaThread* thread, bool halt) {
   JvmtiAgentList::unload_agents();
 
   // No user code can be executed in the current thread after this point.
+
+  tty->print_cr("end");
+  ProfileReuse::load();
 
   // Run before exit and then stop concurrent GC threads.
   Universe::before_exit();
