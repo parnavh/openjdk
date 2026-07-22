@@ -77,24 +77,45 @@ void ProfileReuse::collect_klass(Klass *k) {
       while (mdo->is_valid(pdata)) {
         int tag = pdata->tag();
 
-        if (tag == DataLayout::receiver_type_data_tag ||
-            tag == DataLayout::virtual_call_data_tag ||
-            tag == DataLayout::parameters_type_data_tag) {
-          pdata = mdo->next_data(pdata);
-          continue;
-        }
+        if (tag == DataLayout::parameters_type_data_tag) {
+          // Deferred for now
+        } else if (tag == DataLayout::receiver_type_data_tag ||
+                   tag == DataLayout::virtual_call_data_tag) {
+          ReceiverTypeData *rdata = static_cast<ReceiverTypeData *>(pdata);
 
-        if (!first_record) {
-          mdo_stream.print(";");
-        }
-        first_record = false;
+          if (!first_record)
+            mdo_stream.print(";");
 
-        mdo_stream.print("%d:%d:", pdata->bci(), tag);
+          first_record = false;
 
-        int cells = pdata->cell_count();
-        for (int c = 0; c < cells; c++) {
-          mdo_stream.print("%s%ld", c == 0 ? "" : ",",
-                           (long)pdata->intptr_at_public(c));
+          mdo_stream.print("%d:%d:%d:", pdata->bci(), tag, rdata->count());
+
+          uint row_limit = ReceiverTypeData::row_limit();
+          for (uint row = 0; row < row_limit; row++) {
+            Klass *recv = rdata->receiver(row);
+            uint count = rdata->receiver_count(row);
+            if (row > 0)
+              mdo_stream.print(",");
+            if (recv != nullptr) {
+              mdo_stream.print("%s=%u", recv->name()->as_C_string(), count);
+            } else {
+              mdo_stream.print("null=0");
+            }
+          }
+
+        } else {
+          // generic counter-cell dump for BranchData/CounterData/JumpData/etc.
+          if (!first_record)
+            mdo_stream.print(";");
+          first_record = false;
+
+          mdo_stream.print("%d:%d:", pdata->bci(), tag);
+
+          int cells = pdata->cell_count();
+          for (int c = 0; c < cells; c++) {
+            mdo_stream.print("%s%ld", c == 0 ? "" : ",",
+                             (long)pdata->intptr_at_public(c));
+          }
         }
 
         pdata = mdo->next_data(pdata);
