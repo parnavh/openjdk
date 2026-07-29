@@ -1991,6 +1991,8 @@ const int ObjectAlignmentInBytes = 8;
           "Minimal number of elements in a sorted collection to prefer"     \
           "binary search over simple linear search." )                      \
                                                                             \
+  product(ccstr, ProfileReuseFile, nullptr,                                 \
+          "File used to store and load profile reuse data")                 \
 
 // end of RUNTIME_FLAGS
 

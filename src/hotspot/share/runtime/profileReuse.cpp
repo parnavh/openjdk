@@ -30,7 +30,10 @@ static bool make_key(MethodKey &key, const char *cls, const char *mname,
 }
 
 void ProfileReuse::load() {
-  const char *path = "profile_reuse.data"; // TODO: -XX:ProfileReuseFile=
+  if (ProfileReuseFile == nullptr)
+    return;
+
+  const char *path = ProfileReuseFile;
 
   _table = new (mtInternal) ProfileTable();
 
@@ -174,7 +177,10 @@ MethodEntry *ProfileReuse::lookup(const char *className, const char *methodName,
 }
 
 void ProfileReuse::capture_all() {
-  const char *path = "profile_reuse.data"; // TODO: -XX:ProfileReuseFile=
+  if (ProfileReuseFile == nullptr)
+    return;
+
+  const char *path = ProfileReuseFile;
 
   _capture_file = fopen(path, "w");
   if (_capture_file == nullptr) {
