@@ -7,13 +7,170 @@
 #include "oops/method.hpp"
 #include "oops/methodCounters.hpp"
 #include "oops/methodData.hpp"
+#include "runtime/globals.hpp"
 
 FILE *ProfileReuse::_capture_file = nullptr;
+ProfileTable *ProfileReuse::_table = nullptr;
+bool ProfileReuse::_loaded = false;
 
 void ProfileReuse::safe_copy(char *dst, const char *src, int max_len) {
-  size_t len = MIN2(strlen(src), (size_t)max_len - 1);
-  memcpy(dst, src, len);
-  dst[len] = '\0';
+  strncpy(dst, src, max_len - 1);
+  dst[max_len - 1] = '\0';
+}
+
+static bool make_key(MethodKey &key, const char *cls, const char *mname,
+                     const char *desc) {
+  strncpy(key.className, cls, PR_MAX_NAME_LEN - 1);
+  key.className[PR_MAX_NAME_LEN - 1] = '\0';
+  strncpy(key.methodName, mname, PR_MAX_NAME_LEN - 1);
+  key.methodName[PR_MAX_NAME_LEN - 1] = '\0';
+  strncpy(key.descriptor, desc, PR_MAX_NAME_LEN - 1);
+  key.descriptor[PR_MAX_NAME_LEN - 1] = '\0';
+  return true;
+}
+
+void ProfileReuse::load() {
+  const char *path = "profile_reuse.data"; // TODO: -XX:ProfileReuseFile=
+
+  _table = new (mtInternal) ProfileTable();
+
+  FILE *f = fopen(path, "r");
+  if (f == nullptr) {
+    tty->print_cr("[ProfileReuse] no prior data found at %s, starting fresh",
+                  path);
+    _loaded = true;
+    return;
+  }
+
+  char line[4096];
+  int format_version = -1;
+  bool tiered_at_capture = false;
+
+  while (fgets(line, sizeof(line), f) != nullptr) {
+    // Strip trailing newline.
+    size_t len = strlen(line);
+    if (len > 0 && line[len - 1] == '\n')
+      line[len - 1] = '\0';
+
+    char *fields[16];
+    int nfields = 0;
+    char *saveptr = nullptr;
+    char *tok = strtok_r(line, "\t", &saveptr);
+
+    while (tok != nullptr && nfields < 16) {
+      fields[nfields++] = tok;
+      tok = strtok_r(nullptr, "\t", &saveptr);
+    }
+
+    if (nfields == 0)
+      continue;
+
+    if (strcmp(fields[0], "VERSION") == 0) {
+      format_version = atoi(fields[1]);
+
+      if (format_version != PROFILE_REUSE_FORMAT_VERSION) {
+        tty->print_cr("[ProfileReuse] format version mismatch (file=%d, "
+                      "expected=%d), ignoring file",
+                      format_version, PROFILE_REUSE_FORMAT_VERSION);
+        fclose(f);
+        _loaded = true;
+        return;
+      }
+
+      continue;
+    }
+
+    if (strcmp(fields[0], "TIERED") == 0) {
+      tiered_at_capture = atoi(fields[1]) != 0;
+      continue;
+    }
+
+    if (strcmp(fields[0], "METHOD") == 0 && nfields >= 7) {
+      MethodKey key;
+      make_key(key, fields[1], fields[2], fields[3]);
+
+      bool created = false;
+      MethodEntry *entry = _table->put_if_absent(key, &created);
+      entry->method.invocationCount = atoi(fields[4]);
+      entry->method.backedgeCount = atoi(fields[5]);
+      entry->method.compLevel = atoi(fields[6]);
+    } else if (strcmp(fields[0], "COUNTER") == 0 && nfields >= 6) {
+      MethodKey key;
+      make_key(key, fields[1], fields[2], fields[3]);
+
+      bool created = false;
+      MethodEntry *entry = _table->put_if_absent(key, &created);
+
+      if (entry->counterCount < PR_MAX_COUNTERS_PER_METHOD) {
+        CounterRecord &rec = entry->counters[entry->counterCount++];
+        rec.bci = atoi(fields[4]);
+        rec.tag = atoi(fields[5]);
+        rec.cellCount = 0;
+
+        if (nfields >= 7) {
+          char *cell_saveptr = nullptr;
+          char *cell_tok = strtok_r(fields[6], ",", &cell_saveptr);
+          while (cell_tok != nullptr && rec.cellCount < PR_MAX_CELLS) {
+            rec.cells[rec.cellCount++] = atol(cell_tok);
+            cell_tok = strtok_r(nullptr, ",", &cell_saveptr);
+          }
+        }
+      }
+    } else if (strcmp(fields[0], "RECEIVER") == 0 && nfields >= 7) {
+      MethodKey key;
+      make_key(key, fields[1], fields[2], fields[3]);
+
+      bool created = false;
+      MethodEntry *entry = _table->put_if_absent(key, &created);
+
+      if (entry->receiverCount < PR_MAX_RECEIVERS_PER_METHOD) {
+        ReceiverRecord &rec = entry->receivers[entry->receiverCount++];
+        rec.bci = atoi(fields[4]);
+        rec.tag = atoi(fields[5]);
+        rec.overflowCount = atoi(fields[6]);
+        rec.rowCount = 0;
+
+        if (nfields >= 8) {
+          char *row_saveptr = nullptr;
+          char *row_tok = strtok_r(fields[7], "|", &row_saveptr);
+          while (row_tok != nullptr && rec.rowCount < PR_MAX_ROWS) {
+            char *colon = strchr(row_tok, ':');
+            if (colon != nullptr) {
+              *colon = '\0';
+              const char *name = row_tok;
+              unsigned count = (unsigned)atol(colon + 1);
+
+              ReceiverRow &row = rec.rows[rec.rowCount++];
+              if (strcmp(name, "null") == 0) {
+                row.receiverClass[0] = '\0';
+              } else {
+                safe_copy(row.receiverClass, name, PR_MAX_NAME_LEN);
+              }
+              row.count = count;
+            }
+            row_tok = strtok_r(nullptr, "|", &row_saveptr);
+          }
+        }
+      }
+    }
+  }
+
+  fclose(f);
+  _loaded = true;
+
+  tty->print_cr(
+      "[ProfileReuse] load() done, %d methods loaded (captured with tiered=%d)",
+      _table->number_of_entries(), tiered_at_capture ? 1 : 0);
+}
+
+MethodEntry *ProfileReuse::lookup(const char *className, const char *methodName,
+                                  const char *descriptor) {
+  if (_table == nullptr)
+    return nullptr;
+
+  MethodKey key;
+  make_key(key, className, methodName, descriptor);
+  return _table->get(key);
 }
 
 void ProfileReuse::capture_all() {
@@ -47,6 +204,8 @@ void ProfileReuse::collect_klass(Klass *k) {
   if (ik->class_loader_data()->is_platform_class_loader_data())
     return;
 
+  const char *class_name = ik->name()->as_C_string();
+
   Array<Method *> *methods = ik->methods();
   for (int i = 0; i < methods->length(); i++) {
     Method *m = methods->at(i);
@@ -67,14 +226,14 @@ void ProfileReuse::collect_klass(Klass *k) {
       continue;
     }
 
+    const char *method_name = m->name()->as_C_string();
+    const char *descriptor = m->signature()->as_C_string();
+
     MethodRecord mrec;
-    safe_copy(mrec.className, ik->name()->as_C_string(), PR_MAX_NAME_LEN);
-    safe_copy(mrec.methodName, m->name()->as_C_string(), PR_MAX_NAME_LEN);
-    safe_copy(mrec.descriptor, m->signature()->as_C_string(), PR_MAX_NAME_LEN);
     mrec.invocationCount = invocation_count;
     mrec.backedgeCount = backedge_count;
     mrec.compLevel = comp_level;
-    mrec.write(_capture_file);
+    mrec.write(_capture_file, class_name, method_name, descriptor);
 
     if (!has_mdo)
       continue;
@@ -94,9 +253,6 @@ void ProfileReuse::collect_klass(Klass *k) {
         ReceiverTypeData *rdata = static_cast<ReceiverTypeData *>(pdata);
 
         ReceiverRecord rrec;
-        safe_copy(rrec.className, mrec.className, PR_MAX_NAME_LEN);
-        safe_copy(rrec.methodName, mrec.methodName, PR_MAX_NAME_LEN);
-        safe_copy(rrec.descriptor, mrec.descriptor, PR_MAX_NAME_LEN);
         rrec.bci = bci;
         rrec.tag = tag;
         rrec.overflowCount = rdata->count();
@@ -117,13 +273,10 @@ void ProfileReuse::collect_klass(Klass *k) {
           rrec.rows[row].count = rdata->receiver_count(row);
         }
 
-        rrec.write(_capture_file);
+        rrec.write(_capture_file, class_name, method_name, descriptor);
 
       } else {
         CounterRecord crec;
-        safe_copy(crec.className, mrec.className, PR_MAX_NAME_LEN);
-        safe_copy(crec.methodName, mrec.methodName, PR_MAX_NAME_LEN);
-        safe_copy(crec.descriptor, mrec.descriptor, PR_MAX_NAME_LEN);
         crec.bci = bci;
         crec.tag = tag;
 
@@ -135,7 +288,7 @@ void ProfileReuse::collect_klass(Klass *k) {
           crec.cells[c] = pdata->intptr_at_public(c);
         }
 
-        crec.write(_capture_file);
+        crec.write(_capture_file, class_name, method_name, descriptor);
       }
 
       pdata = mdo->next_data(pdata);
