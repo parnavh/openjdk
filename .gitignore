@@ -34,4 +34,4 @@ test/benchmarks/**/target
 .direnv
 target/
 .mvn/
-profile_reuse.data
+/*.data

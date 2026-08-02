@@ -327,6 +327,7 @@ protected:
 public:
   int tag() { return data()->tag(); }
   intptr_t intptr_at_public(int index) const { return intptr_at(index); }
+  void set_intptr_at_public(int index, intptr_t value) { set_intptr_at(index, value); }
   
   // How many cells are in this?
   virtual int cell_count() const {

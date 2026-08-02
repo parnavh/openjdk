@@ -1,5 +1,6 @@
 #pragma once
 #include "memory/allStatic.hpp"
+#include "oops/method.hpp"
 #include "utilities/hashTable.hpp"
 #include <cstdio>
 #include <cstring>
@@ -119,4 +120,5 @@ public:
   static void capture_all();
   static MethodEntry *lookup(const char *className, const char *methodName,
                              const char *descriptor);
+  static void restore_method_data(Method *m, MethodEntry *entry);
 };

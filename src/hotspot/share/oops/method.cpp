@@ -678,6 +678,15 @@ void Method::build_profiling_method_data(const methodHandle& method, TRAPS) {
     return;
   }
 
+  MethodEntry* entry = ProfileReuse::lookup(
+      method->method_holder()->name()->as_C_string(),
+      method->name()->as_C_string(),
+      method->signature()->as_C_string());
+
+  if (entry != nullptr) {
+    ProfileReuse::restore_method_data(method(), entry);
+  }
+
   if (PrintMethodData && (Verbose || WizardMode)) {
     ResourceMark rm(THREAD);
     tty->print("build_profiling_method_data for ");

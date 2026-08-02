@@ -198,6 +198,16 @@ void ProfileReuse::capture_all() {
   tty->print_cr("[ProfileReuse] capture_all() done, wrote %s", path);
 }
 
+static bool is_safe_generic_tag(int tag) {
+  return tag == DataLayout::bit_data_tag ||
+         tag == DataLayout::counter_data_tag ||
+         tag == DataLayout::jump_data_tag ||
+         tag == DataLayout::branch_data_tag ||
+         tag == DataLayout::multi_branch_data_tag ||
+         tag == DataLayout::ret_data_tag ||
+         tag == DataLayout::arg_info_data_tag;
+}
+
 void ProfileReuse::collect_klass(Klass *k) {
   if (!k->is_instance_klass())
     return;
@@ -281,7 +291,7 @@ void ProfileReuse::collect_klass(Klass *k) {
 
         rrec.write(_capture_file, class_name, method_name, descriptor);
 
-      } else {
+      } else if (is_safe_generic_tag(tag)) {
         CounterRecord crec;
         crec.bci = bci;
         crec.tag = tag;
@@ -299,5 +309,50 @@ void ProfileReuse::collect_klass(Klass *k) {
 
       pdata = mdo->next_data(pdata);
     }
+  }
+}
+
+void ProfileReuse::restore_method_data(Method *m, MethodEntry *entry) {
+  MethodData *mdo = m->method_data();
+  if (mdo == nullptr)
+    return;
+
+  ProfileData *pdata = mdo->first_data();
+  while (mdo->is_valid(pdata)) {
+    int tag = pdata->tag();
+    int bci = pdata->bci();
+
+    if (tag == DataLayout::receiver_type_data_tag ||
+        tag == DataLayout::virtual_call_data_tag) {
+      ReceiverTypeData *rdata = static_cast<ReceiverTypeData *>(pdata);
+
+      for (int i = 0; i < entry->receiverCount; i++) {
+        ReceiverRecord &rec = entry->receivers[i];
+        if (rec.bci == bci && rec.tag == tag) {
+          uint row_limit = ReceiverTypeData::row_limit();
+          for (uint row = 0; row < row_limit && (int)row < rec.rowCount;
+               row++) {
+            if (rec.rows[row].receiverClass[0] != '\0') {
+              // TODO
+            }
+          }
+          break;
+        }
+      }
+
+    } else if (is_safe_generic_tag(tag)) {
+      for (int i = 0; i < entry->counterCount; i++) {
+        CounterRecord &rec = entry->counters[i];
+        if (rec.bci == bci && rec.tag == tag) {
+          int cells = pdata->cell_count();
+          for (int c = 0; c < cells && c < rec.cellCount; c++) {
+            pdata->set_intptr_at_public(c, rec.cells[c]);
+          }
+          break;
+        }
+      }
+    }
+
+    pdata = mdo->next_data(pdata);
   }
 }
