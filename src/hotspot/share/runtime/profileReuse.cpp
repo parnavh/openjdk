@@ -1,6 +1,8 @@
 #include "runtime/profileReuse.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
+#include "classfile/symbolTable.hpp"
+#include "classfile/systemDictionary.hpp"
 #include "code/nmethod.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.hpp"
@@ -324,6 +326,8 @@ void ProfileReuse::restore_method_data(Method *m, MethodEntry *entry) {
   if (mdo == nullptr)
     return;
 
+  Handle loader_handle(Thread::current(), m->method_holder()->class_loader());
+
   ProfileData *pdata = mdo->first_data();
   while (mdo->is_valid(pdata)) {
     int tag = pdata->tag();
@@ -340,7 +344,16 @@ void ProfileReuse::restore_method_data(Method *m, MethodEntry *entry) {
           for (uint row = 0; row < row_limit && (int)row < rec.rowCount;
                row++) {
             if (rec.rows[row].receiverClass[0] != '\0') {
-              // TODO
+              Symbol *class_sym =
+                  SymbolTable::new_symbol(rec.rows[row].receiverClass);
+              InstanceKlass *k = SystemDictionary::find_instance_klass(
+                  Thread::current(), class_sym, loader_handle);
+
+              if (k != nullptr) {
+                rdata->set_receiver(row, k);
+                rdata->set_receiver_count(row, rec.rows[row].count);
+              }
+              // else: not loaded under this loader (yet, or at all) — skip row.
             }
           }
           break;
