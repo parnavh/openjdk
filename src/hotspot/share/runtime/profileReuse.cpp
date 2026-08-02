@@ -30,6 +30,8 @@ static bool make_key(MethodKey &key, const char *cls, const char *mname,
 }
 
 void ProfileReuse::load() {
+  _vm_start_ns = os::javaTimeNanos();
+
   if (ProfileReuseFile == nullptr)
     return;
 
@@ -174,6 +176,11 @@ MethodEntry *ProfileReuse::lookup(const char *className, const char *methodName,
   MethodKey key;
   make_key(key, className, methodName, descriptor);
   return _table->get(key);
+}
+
+void ProfileReuse::dump() {
+  capture_all();
+  write_measurements();
 }
 
 void ProfileReuse::capture_all() {
@@ -355,4 +362,56 @@ void ProfileReuse::restore_method_data(Method *m, MethodEntry *entry) {
 
     pdata = mdo->next_data(pdata);
   }
+}
+
+jlong ProfileReuse::_vm_start_ns = 0;
+
+void ProfileReuse::record_tier_event(Method *m, int tier) {
+  if (!ProfileReuseMeasureFile || _table == nullptr)
+    return;
+
+  InstanceKlass *ik = m->method_holder();
+  if (ik->class_loader_data()->is_the_null_class_loader_data())
+    return;
+  if (ik->is_hidden())
+    return;
+  if (ik->class_loader_data()->is_platform_class_loader_data())
+    return;
+
+  MethodKey key;
+  make_key(key, ik->name()->as_C_string(), m->name()->as_C_string(),
+           m->signature()->as_C_string());
+
+  bool created = false;
+  MethodEntry *entry = _table->put_if_absent(key, &created);
+
+  if (entry->tierEventCount < 8) {
+    jlong elapsed = os::javaTimeNanos() - _vm_start_ns;
+    entry->tierEvents[entry->tierEventCount].tier = tier;
+    entry->tierEvents[entry->tierEventCount].elapsedNanos = elapsed;
+    entry->tierEventCount++;
+  }
+}
+
+void ProfileReuse::write_measurements() {
+  if (!ProfileReuseMeasureFile)
+    return;
+
+  const char *path = ProfileReuseMeasureFile;
+  FILE *f = fopen(path, "a");
+  if (f == nullptr) {
+    tty->print_cr("[ProfileReuse] failed to open measure file: %s", path);
+    return;
+  }
+
+  _table->iterate_all([&](MethodKey &key, MethodEntry &entry) {
+    for (int i = 0; i < entry.tierEventCount; i++) {
+      fprintf(f, "%s\t%s\t%s\t%d\t%ld\n", key.className, key.methodName,
+              key.descriptor, entry.tierEvents[i].tier,
+              (long)entry.tierEvents[i].elapsedNanos);
+    }
+  });
+
+  fclose(f);
+  tty->print_cr("[ProfileReuse] write_measurements() done, wrote %s", path);
 }

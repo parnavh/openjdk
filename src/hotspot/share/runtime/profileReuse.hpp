@@ -92,6 +92,11 @@ inline bool equals_method_key(MethodKey const &a, MethodKey const &b) {
          strcmp(a.descriptor, b.descriptor) == 0;
 }
 
+struct TierEvent {
+  int tier;
+  jlong elapsedNanos;
+};
+
 struct MethodEntry {
   MethodRecord method;
 
@@ -100,6 +105,9 @@ struct MethodEntry {
 
   ReceiverRecord receivers[PR_MAX_RECEIVERS_PER_METHOD];
   int receiverCount = 0;
+
+  TierEvent tierEvents[8];
+  int tierEventCount = 0;
 };
 
 using ProfileTable = HashTable<MethodKey, MethodEntry, 1024, AnyObj::C_HEAP,
@@ -111,14 +119,18 @@ private:
   static FILE *_capture_file;
   static ProfileTable *_table;
   static bool _loaded;
+  static jlong _vm_start_ns;
 
   static void collect_klass(Klass *k);
   static void safe_copy(char *dst, const char *src, int max_len);
 
 public:
   static void load();
+  static void dump();
   static void capture_all();
   static MethodEntry *lookup(const char *className, const char *methodName,
                              const char *descriptor);
   static void restore_method_data(Method *m, MethodEntry *entry);
+  static void record_tier_event(Method *m, int tier);
+  static void write_measurements();
 };

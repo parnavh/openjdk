@@ -87,6 +87,8 @@
 #include "utilities/hashTable.hpp"
 #include "utilities/xmlstream.hpp"
 
+#include "runtime/profileReuse.hpp"
+
 #ifdef DTRACE_ENABLED
 
 // Only bother with this argument setup if dtrace is available
@@ -2390,6 +2392,8 @@ void nmethod::post_compiled_method(CompileTask* task) {
 
   // JVMTI -- compiled method notification (must be done outside lock)
   post_compiled_method_load_event();
+
+  ProfileReuse::record_tier_event(method(), comp_level());
 
   if (CompilationLog::log() != nullptr) {
     CompilationLog::log()->log_nmethod(JavaThread::current(), this);

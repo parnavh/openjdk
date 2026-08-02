@@ -474,7 +474,7 @@ void before_exit(JavaThread* thread, bool halt) {
 
   // No user code can be executed in the current thread after this point.
 
-  ProfileReuse::capture_all();
+  ProfileReuse::dump();
 
   // Run before exit and then stop concurrent GC threads.
   Universe::before_exit();

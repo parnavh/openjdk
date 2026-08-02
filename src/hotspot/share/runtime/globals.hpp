@@ -1993,6 +1993,9 @@ const int ObjectAlignmentInBytes = 8;
                                                                             \
   product(ccstr, ProfileReuseFile, nullptr,                                 \
           "File used to store and load profile reuse data")                 \
+                                                                            \
+  product(ccstr, ProfileReuseMeasureFile, nullptr,                          \
+          "Enable ProfileReuse Measurement data dumps")                     \
 
 // end of RUNTIME_FLAGS
 
