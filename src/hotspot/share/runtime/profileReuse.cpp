@@ -33,13 +33,12 @@ static bool make_key(MethodKey &key, const char *cls, const char *mname,
 
 void ProfileReuse::load() {
   _vm_start_ns = os::javaTimeNanos();
+  _table = new (mtInternal) ProfileTable();
 
   if (ProfileReuseFile == nullptr)
     return;
 
   const char *path = ProfileReuseFile;
-
-  _table = new (mtInternal) ProfileTable();
 
   FILE *f = fopen(path, "r");
   if (f == nullptr) {
