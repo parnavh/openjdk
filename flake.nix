@@ -8,6 +8,7 @@
     {
       nixpkgs,
       flake-utils,
+      ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -19,6 +20,7 @@
           nativeBuildInputs = with pkgs; [
             autoconf
             cmake
+            maven
             pkg-config
           ];
 
