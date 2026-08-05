@@ -35,3 +35,4 @@ test/benchmarks/**/target
 target/
 .mvn/
 /*.data
+scripts/*.data

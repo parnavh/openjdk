@@ -727,7 +727,34 @@ MethodCounters* Method::build_method_counters(Thread* current, Method* m) {
   if (!mh->init_method_counters(counters)) {
     MetadataFactory::free_metadata(mh->method_holder()->class_loader_data(), counters);
   } else {
-    // tty->print_cr("yoo");
+    MethodEntry* entry = ProfileReuse::lookup(
+        mh->method_holder()->name()->as_C_string(),
+        mh->name()->as_C_string(),
+        mh->signature()->as_C_string());
+  
+    if (entry != nullptr) {
+      int seed_invocation = entry->method.invocationCount;
+      int seed_backedge   = entry->method.backedgeCount;
+  
+      switch (entry->method.compLevel) {
+        case 3:
+          seed_invocation = MAX2(seed_invocation, (int) Tier3InvocationThreshold);
+          if (entry->method.backedgeCount > 0) {
+            seed_backedge = MAX2(seed_backedge, (int) Tier3BackEdgeThreshold);
+          }
+          break;
+        case 4:
+          seed_invocation = MAX2(seed_invocation, (int) Tier4InvocationThreshold);
+          if (entry->method.backedgeCount > 0) {
+            seed_backedge = MAX2(seed_backedge, (int) Tier4BackEdgeThreshold);
+          }
+          break;
+        default: break;
+      }
+  
+      counters->invocation_counter()->set(seed_invocation);
+      counters->backedge_counter()->set(seed_backedge);
+    }
   }
 
   return mh->method_counters();
