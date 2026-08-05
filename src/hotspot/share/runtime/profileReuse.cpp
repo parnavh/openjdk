@@ -257,7 +257,8 @@ void ProfileReuse::collect_klass(Klass *k) {
     mrec.invocationCount = invocation_count;
     mrec.backedgeCount = backedge_count;
     mrec.compLevel = comp_level;
-    mrec.write(_capture_file, class_name, method_name, descriptor);
+    mrec.write(_capture_file, class_name, method_name, descriptor,
+               _vm_start_ns);
 
     if (!has_mdo)
       continue;
@@ -297,7 +298,8 @@ void ProfileReuse::collect_klass(Klass *k) {
           rrec.rows[row].count = rdata->receiver_count(row);
         }
 
-        rrec.write(_capture_file, class_name, method_name, descriptor);
+        rrec.write(_capture_file, class_name, method_name, descriptor,
+                   _vm_start_ns);
 
       } else if (is_safe_generic_tag(tag)) {
         CounterRecord crec;
@@ -312,7 +314,8 @@ void ProfileReuse::collect_klass(Klass *k) {
           crec.cells[c] = pdata->intptr_at_public(c);
         }
 
-        crec.write(_capture_file, class_name, method_name, descriptor);
+        crec.write(_capture_file, class_name, method_name, descriptor,
+                   _vm_start_ns);
       }
 
       pdata = mdo->next_data(pdata);
@@ -418,8 +421,8 @@ void ProfileReuse::write_measurements() {
 
   _table->iterate_all([&](MethodKey &key, MethodEntry &entry) {
     for (int i = 0; i < entry.tierEventCount; i++) {
-      fprintf(f, "%s\t%s\t%s\t%d\t%ld\n", key.className, key.methodName,
-              key.descriptor, entry.tierEvents[i].tier,
+      fprintf(f, "%ld\t%s\t%s\t%s\t%d\t%ld\n", _vm_start_ns, key.className,
+              key.methodName, key.descriptor, entry.tierEvents[i].tier,
               (long)entry.tierEvents[i].elapsedNanos);
     }
   });

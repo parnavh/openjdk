@@ -21,9 +21,9 @@ struct MethodRecord {
   int backedgeCount;
   int compLevel;
 
-  void write(FILE *f, const char *cls, const char *mname,
-             const char *desc) const {
-    fprintf(f, "METHOD\t%s\t%s\t%s\t%d\t%d\t%d\n", cls, mname, desc,
+  void write(FILE *f, const char *cls, const char *mname, const char *desc,
+             const jlong id) const {
+    fprintf(f, "%ld\tMETHOD\t%s\t%s\t%s\t%d\t%d\t%d\n", id, cls, mname, desc,
             invocationCount, backedgeCount, compLevel);
   }
 };
@@ -34,9 +34,10 @@ struct CounterRecord {
   long cells[PR_MAX_CELLS];
   int cellCount;
 
-  void write(FILE *f, const char *cls, const char *mname,
-             const char *desc) const {
-    fprintf(f, "COUNTER\t%s\t%s\t%s\t%d\t%d\t", cls, mname, desc, bci, tag);
+  void write(FILE *f, const char *cls, const char *mname, const char *desc,
+             const jlong id) const {
+    fprintf(f, "%ld\tCOUNTER\t%s\t%s\t%s\t%d\t%d\t", id, cls, mname, desc, bci,
+            tag);
     for (int i = 0; i < cellCount; i++) {
       fprintf(f, "%s%ld", i == 0 ? "" : ",", cells[i]);
     }
@@ -56,10 +57,10 @@ struct ReceiverRecord {
   ReceiverRow rows[PR_MAX_ROWS];
   int rowCount;
 
-  void write(FILE *f, const char *cls, const char *mname,
-             const char *desc) const {
-    fprintf(f, "RECEIVER\t%s\t%s\t%s\t%d\t%d\t%d\t", cls, mname, desc, bci, tag,
-            overflowCount);
+  void write(FILE *f, const char *cls, const char *mname, const char *desc,
+             const jlong id) const {
+    fprintf(f, "%ld\tRECEIVER\t%s\t%s\t%s\t%d\t%d\t%d\t", id, cls, mname, desc,
+            bci, tag, overflowCount);
     for (int i = 0; i < rowCount; i++) {
       const char *name =
           rows[i].receiverClass[0] != '\0' ? rows[i].receiverClass : "null";
