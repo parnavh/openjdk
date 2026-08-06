@@ -257,8 +257,7 @@ void ProfileReuse::collect_klass(Klass *k) {
     mrec.invocationCount = invocation_count;
     mrec.backedgeCount = backedge_count;
     mrec.compLevel = comp_level;
-    mrec.write(_capture_file, class_name, method_name, descriptor,
-               _vm_start_ns);
+    mrec.write(_capture_file, class_name, method_name, descriptor);
 
     if (!has_mdo)
       continue;
@@ -298,8 +297,7 @@ void ProfileReuse::collect_klass(Klass *k) {
           rrec.rows[row].count = rdata->receiver_count(row);
         }
 
-        rrec.write(_capture_file, class_name, method_name, descriptor,
-                   _vm_start_ns);
+        rrec.write(_capture_file, class_name, method_name, descriptor);
 
       } else if (is_safe_generic_tag(tag)) {
         CounterRecord crec;
@@ -314,8 +312,7 @@ void ProfileReuse::collect_klass(Klass *k) {
           crec.cells[c] = pdata->intptr_at_public(c);
         }
 
-        crec.write(_capture_file, class_name, method_name, descriptor,
-                   _vm_start_ns);
+        crec.write(_capture_file, class_name, method_name, descriptor);
       }
 
       pdata = mdo->next_data(pdata);
