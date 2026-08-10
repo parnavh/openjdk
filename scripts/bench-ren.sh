@@ -2,78 +2,161 @@
 
 set -euo pipefail
 
-if [ "$#" -ne 5 ]; then
-    echo "Usage: $0 <iterations> <profile_reuse_file> <profile_measure_file> <vanilla_measure_file> <renaissance_jar>"
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <iterations> <renaissance_jar>"
     exit 1
 fi
 
 ITERATIONS="$1"
-PROFILE_REUSE_FILE="$2"
-PROFILE_MEASURE_FILE="$3"
-VANILLA_MEASURE_FILE="$4"
-RENAISSANCE_JAR="$5"
+RENAISSANCE_JAR="$2"
 
 JAVA="./build/linux-x86_64-server-release/jdk/bin/java"
-BENCHMARK="gauss-mix"
 
-PROFILE_CSV="profilereuse.csv"
-VANILLA_CSV="vanilla.csv"
+RUNS_DIR="runs"
+FAIL_FILE="$RUNS_DIR/fail"
 TMP_CSV="$(mktemp)"
 
-# Start with fresh measurement files
-: > "$PROFILE_MEASURE_FILE"
-: > "$VANILLA_MEASURE_FILE"
+trap 'rm -f "$TMP_CSV"' EXIT
 
-# Start with fresh Renaissance CSVs
-rm -f "$PROFILE_CSV" "$VANILLA_CSV"
+BENCHMARKS=(
+    akka-uct
+    als
+    chi-square
+    db-shootout
+    dec-tree
+    dotty
+    finagle-chirper
+    finagle-http
+    fj-kmeans
+    future-genetic
+    # gauss-mix
+    log-regression
+    mnemonics
+    movie-lens
+    naive-bayes
+    neo4j-analytics
+    page-rank
+    par-mnemonics
+    philosophers
+    reactors
+    rx-scrabble
+    scala-doku
+    scala-kmeans
+    scala-stm-bench7
+    scrabble
+)
 
-for ((i=1; i<=ITERATIONS; i++)); do
-    echo "========================================"
-    echo "Iteration $i/$ITERATIONS"
-    echo "========================================"
+mkdir -p "$RUNS_DIR"
+touch "$FAIL_FILE"
 
-    echo "[1/2] ProfileReuse"
+for BENCHMARK in "${BENCHMARKS[@]}"; do
+    echo "########################################"
+    echo "Benchmark: $BENCHMARK"
+    echo "########################################"
 
-    /usr/bin/time -f "%e" \
-        -o profile_runtime.data \
-        -a \
-        "$JAVA" \
-        -XX:ProfileReuseFile="$PROFILE_REUSE_FILE" \
-        -XX:ProfileReuseMeasureFile="$PROFILE_MEASURE_FILE" \
-        -jar "$RENAISSANCE_JAR" \
-        "$BENCHMARK" \
-        -r 10 \
-        --csv "$TMP_CSV"
+    BENCHMARK_DIR="$RUNS_DIR/$BENCHMARK"
 
-    # Append Renaissance CSV (keep header only once)
-    if [[ ! -f "$PROFILE_CSV" ]]; then
-        cat "$TMP_CSV" > "$PROFILE_CSV"
+    mkdir -p "$BENCHMARK_DIR"
+
+    PROFILE_FILE="$BENCHMARK_DIR/profile.data"
+    PROFILE_MEASURE_FILE="$BENCHMARK_DIR/measurement_profile.tsv"
+    VANILLA_MEASURE_FILE="$BENCHMARK_DIR/measurement_vanilla.tsv"
+
+    PROFILE_TIME="$BENCHMARK_DIR/profile.time"
+    VANILLA_TIME="$BENCHMARK_DIR/vanilla.time"
+
+    PROFILE_CSV="$BENCHMARK_DIR/profile.csv"
+    VANILLA_CSV="$BENCHMARK_DIR/vanilla.csv"
+
+    # Start with fresh measurement/time/CSV files.
+    : > "$PROFILE_MEASURE_FILE"
+    : > "$VANILLA_MEASURE_FILE"
+    : > "$PROFILE_TIME"
+    : > "$VANILLA_TIME"
+
+    rm -f "$PROFILE_CSV" "$VANILLA_CSV"
+
+    BENCHMARK_FAILED=0
+
+    for ((i=1; i<=ITERATIONS; i++)); do
+        echo "========================================"
+        echo "$BENCHMARK: Iteration $i/$ITERATIONS"
+        echo "========================================"
+
+        echo "[1/2] ProfileReuse"
+
+        set +e
+
+        /usr/bin/time -f "%e" \
+            -o "$PROFILE_TIME" \
+            -a \
+            "$JAVA" \
+            -XX:ProfileReuseFile="$PROFILE_FILE" \
+            -XX:ProfileReuseMeasureFile="$PROFILE_MEASURE_FILE" \
+            -jar "$RENAISSANCE_JAR" \
+            "$BENCHMARK" \
+            -r 10 \
+            --csv "$TMP_CSV"
+
+        PROFILE_STATUS=$?
+
+        set -e
+
+        if [[ "$PROFILE_STATUS" -ne 0 ]]; then
+            BENCHMARK_FAILED=1
+            break
+        fi
+
+        # Append Renaissance CSV, keeping the header only once.
+        if [[ ! -f "$PROFILE_CSV" ]]; then
+            cat "$TMP_CSV" > "$PROFILE_CSV"
+        else
+            tail -n +2 "$TMP_CSV" >> "$PROFILE_CSV"
+        fi
+
+        echo
+
+        echo "[2/2] Vanilla"
+
+        set +e
+
+        /usr/bin/time -f "%e" \
+            -o "$VANILLA_TIME" \
+            -a \
+            "$JAVA" \
+            -XX:ProfileReuseMeasureFile="$VANILLA_MEASURE_FILE" \
+            -jar "$RENAISSANCE_JAR" \
+            "$BENCHMARK" \
+            -r 10 \
+            --csv "$TMP_CSV"
+
+        VANILLA_STATUS=$?
+
+        set -e
+
+        if [[ "$VANILLA_STATUS" -ne 0 ]]; then
+            BENCHMARK_FAILED=1
+            break
+        fi
+
+        # Append Renaissance CSV, keeping the header only once.
+        if [[ ! -f "$VANILLA_CSV" ]]; then
+            cat "$TMP_CSV" > "$VANILLA_CSV"
+        else
+            tail -n +2 "$TMP_CSV" >> "$VANILLA_CSV"
+        fi
+
+        echo
+    done
+
+    if [[ "$BENCHMARK_FAILED" -eq 1 ]]; then
+        echo "$BENCHMARK" >> "$FAIL_FILE"
+        echo "Failed: $BENCHMARK"
     else
-        tail -n +2 "$TMP_CSV" >> "$PROFILE_CSV"
-    fi
-
-    echo
-
-    echo "[2/2] Vanilla"
-
-    /usr/bin/time -f "%e" \
-        -o vanilla_runtime.data \
-        -a \
-        "$JAVA" \
-        -XX:ProfileReuseMeasureFile="$VANILLA_MEASURE_FILE" \
-        -jar "$RENAISSANCE_JAR" \
-        "$BENCHMARK" \
-        -r 10 \
-        --csv "$TMP_CSV"
-
-    # Append Renaissance CSV (keep header only once)
-    if [[ ! -f "$VANILLA_CSV" ]]; then
-        cat "$TMP_CSV" > "$VANILLA_CSV"
-    else
-        tail -n +2 "$TMP_CSV" >> "$VANILLA_CSV"
+        echo "Completed: $BENCHMARK"
     fi
 
     echo
 done
 
-rm -f "$TMP_CSV"
+echo "All benchmarks completed."
