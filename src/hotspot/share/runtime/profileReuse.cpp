@@ -397,7 +397,7 @@ void ProfileReuse::record_tier_event(Method *m, int tier) {
   bool created = false;
   MethodEntry *entry = _table->put_if_absent(key, &created);
 
-  if (entry->tierEventCount < 8) {
+  if (entry->tierEventCount < 32) {
     jlong elapsed = os::javaTimeNanos() - _vm_start_ns;
     entry->tierEvents[entry->tierEventCount].tier = tier;
     entry->tierEvents[entry->tierEventCount].elapsedNanos = elapsed;

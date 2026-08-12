@@ -106,7 +106,7 @@ struct MethodEntry {
   ReceiverRecord receivers[PR_MAX_RECEIVERS_PER_METHOD];
   int receiverCount = 0;
 
-  TierEvent tierEvents[8];
+  TierEvent tierEvents[32];
   int tierEventCount = 0;
 };
 

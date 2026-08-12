@@ -29,7 +29,7 @@ BENCHMARKS=(
     finagle-http
     fj-kmeans
     future-genetic
-    # gauss-mix
+    gauss-mix
     log-regression
     mnemonics
     movie-lens
