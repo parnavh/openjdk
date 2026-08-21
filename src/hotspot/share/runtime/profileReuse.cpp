@@ -33,12 +33,6 @@ static bool make_key(MethodKey &key, const char *cls, const char *mname,
 
 void ProfileReuse::load() {
   _vm_start_ns = os::javaTimeNanos();
-  jlong parse_ns = 0;
-  jlong created_ns = 0;
-  jlong lookup_ns = 0;
-  int created_count = 0;
-  int lookup_count = 0;
-
   _table = new (mtInternal) ProfileTable();
 
   if (ProfileReuseFile == nullptr)
@@ -59,7 +53,6 @@ void ProfileReuse::load() {
   bool tiered_at_capture = false;
 
   while (fgets(line, sizeof(line), f) != nullptr) {
-    jlong t0 = os::javaTimeNanos();
     // Strip trailing newline.
     size_t len = strlen(line);
     if (len > 0 && line[len - 1] == '\n')
@@ -74,9 +67,6 @@ void ProfileReuse::load() {
       fields[nfields++] = tok;
       tok = strtok_r(nullptr, "\t", &saveptr);
     }
-
-    jlong t1 = os::javaTimeNanos();
-    parse_ns += (t1 - t0);
 
     if (nfields == 0)
       continue;
@@ -101,24 +91,12 @@ void ProfileReuse::load() {
       continue;
     }
 
-    jlong t2 = os::javaTimeNanos();
-
     if (strcmp(fields[0], "METHOD") == 0 && nfields >= 7) {
       MethodKey key;
       make_key(key, fields[1], fields[2], fields[3]);
 
       bool created = false;
       MethodEntry *entry = _table->put_if_absent(key, &created);
-
-      jlong t3 = os::javaTimeNanos();
-      if (created) {
-        created_ns += (t3 - t2);
-        created_count++;
-      } else {
-        lookup_ns += (t3 - t2);
-        lookup_count++;
-      }
-
       entry->method.invocationCount = atoi(fields[4]);
       entry->method.backedgeCount = atoi(fields[5]);
       entry->method.compLevel = atoi(fields[6]);
@@ -126,17 +104,8 @@ void ProfileReuse::load() {
       MethodKey key;
       make_key(key, fields[1], fields[2], fields[3]);
 
-      jlong t2 = os::javaTimeNanos();
       bool created = false;
       MethodEntry *entry = _table->put_if_absent(key, &created);
-      jlong t3 = os::javaTimeNanos();
-      if (created) {
-        created_ns += (t3 - t2);
-        created_count++;
-      } else {
-        lookup_ns += (t3 - t2);
-        lookup_count++;
-      }
 
       if (entry->counterCount < PR_MAX_COUNTERS_PER_METHOD) {
         CounterRecord &rec = entry->counters[entry->counterCount++];
@@ -157,17 +126,8 @@ void ProfileReuse::load() {
       MethodKey key;
       make_key(key, fields[1], fields[2], fields[3]);
 
-      jlong t2 = os::javaTimeNanos();
       bool created = false;
       MethodEntry *entry = _table->put_if_absent(key, &created);
-      jlong t3 = os::javaTimeNanos();
-      if (created) {
-        created_ns += (t3 - t2);
-        created_count++;
-      } else {
-        lookup_ns += (t3 - t2);
-        lookup_count++;
-      }
 
       if (entry->receiverCount < PR_MAX_RECEIVERS_PER_METHOD) {
         ReceiverRecord &rec = entry->receivers[entry->receiverCount++];
@@ -204,18 +164,9 @@ void ProfileReuse::load() {
   fclose(f);
   _loaded = true;
 
-  jlong t_end = os::javaTimeNanos();
-  tty->print_cr("[ProfileReuse] load() done, %d methods loaded",
-                _table->number_of_entries());
-  tty->print_cr("[ProfileReuse] total=%ld ms, parse=%ld ms",
-                (long)((t_end - _vm_start_ns) / 1000000),
-                (long)(parse_ns / 1000000));
-  tty->print_cr("[ProfileReuse] created: count=%d, total=%ld ms, avg=%ld ns",
-                created_count, (long)(created_ns / 1000000),
-                created_count > 0 ? (long)(created_ns / created_count) : 0);
-  tty->print_cr("[ProfileReuse] lookup:  count=%d, total=%ld ms, avg=%ld ns",
-                lookup_count, (long)(lookup_ns / 1000000),
-                lookup_count > 0 ? (long)(lookup_ns / lookup_count) : 0);
+  tty->print_cr(
+      "[ProfileReuse] load() done, %d methods loaded (captured with tiered=%d)",
+      _table->number_of_entries(), tiered_at_capture ? 1 : 0);
 }
 
 MethodEntry *ProfileReuse::lookup(const char *className, const char *methodName,
