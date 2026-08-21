@@ -8,6 +8,7 @@
     {
       nixpkgs,
       flake-utils,
+      ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -19,7 +20,13 @@
           nativeBuildInputs = with pkgs; [
             autoconf
             cmake
+            maven
             pkg-config
+            (python313.withPackages (python-pkgs: with python-pkgs; [
+              ipykernel
+              matplotlib
+              pandas
+            ]))
           ];
 
           buildInputs = with pkgs; [
